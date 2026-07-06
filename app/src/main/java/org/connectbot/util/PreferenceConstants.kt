@@ -71,6 +71,14 @@ object PreferenceConstants {
     const val CONNECTION_PERSIST: String = "connPersist"
     const val NOTIFICATION_PERMISSION_DENIED: String = "notificationPermissionDenied"
 
+    /* Automatic reconnect strategy for hosts with "stay connected" enabled */
+    const val RECONNECT_MAX_ATTEMPTS: String = "reconnectMaxAttempts"
+    const val DEFAULT_RECONNECT_MAX_ATTEMPTS: Int = 0 // 0 = unlimited
+    const val RECONNECT_INTERVAL: String = "reconnectInterval"
+    const val DEFAULT_RECONNECT_INTERVAL_SECONDS: Int = 5
+    const val RECONNECT_BACKOFF: String = "reconnectBackoff"
+    const val DEFAULT_RECONNECT_BACKOFF: Boolean = false
+
     const val SHIFT_FKEYS: String = "shiftfkeys"
     const val CTRL_FKEYS: String = "ctrlfkeys"
     const val VOLUME_FONT: String = "volumefont"

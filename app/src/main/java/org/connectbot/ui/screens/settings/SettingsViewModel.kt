@@ -57,6 +57,9 @@ data class SettingsUiState(
     val connPersist: Boolean = true,
     val wifilock: Boolean = true,
     val backupkeys: Boolean = false,
+    val reconnectMaxAttempts: String = "0",
+    val reconnectInterval: String = "5",
+    val reconnectBackoff: Boolean = false,
     val scrollback: String = "140",
     val rotation: String = "Default",
     val titlebarhide: Boolean = false,
@@ -195,6 +198,14 @@ class SettingsViewModel @Inject constructor(
             connPersist = prefs.getBoolean(PreferenceConstants.CONNECTION_PERSIST, true),
             wifilock = prefs.getBoolean("wifilock", true),
             backupkeys = prefs.getBoolean("backupkeys", false),
+            reconnectMaxAttempts = prefs.getString(PreferenceConstants.RECONNECT_MAX_ATTEMPTS, null)
+                ?: PreferenceConstants.DEFAULT_RECONNECT_MAX_ATTEMPTS.toString(),
+            reconnectInterval = prefs.getString(PreferenceConstants.RECONNECT_INTERVAL, null)
+                ?: PreferenceConstants.DEFAULT_RECONNECT_INTERVAL_SECONDS.toString(),
+            reconnectBackoff = prefs.getBoolean(
+                PreferenceConstants.RECONNECT_BACKOFF,
+                PreferenceConstants.DEFAULT_RECONNECT_BACKOFF,
+            ),
             scrollback = prefs.getString("scrollback", "140") ?: "140",
             rotation = prefs.getString("rotation", "Default") ?: "Default",
             titlebarhide = prefs.getBoolean("titlebarhide", false),
@@ -287,6 +298,24 @@ class SettingsViewModel @Inject constructor(
 
     fun updateBackupkeys(value: Boolean) {
         updateBooleanPref(PreferenceConstants.BACKUP_KEYS, value) { copy(backupkeys = value) }
+    }
+
+    fun updateReconnectMaxAttempts(value: String) {
+        // Only allow numeric input; 0 means unlimited
+        if (value.isEmpty() || value.all { it.isDigit() }) {
+            updateStringPref(PreferenceConstants.RECONNECT_MAX_ATTEMPTS, value) { copy(reconnectMaxAttempts = value) }
+        }
+    }
+
+    fun updateReconnectInterval(value: String) {
+        // Only allow numeric input
+        if (value.isEmpty() || value.all { it.isDigit() }) {
+            updateStringPref(PreferenceConstants.RECONNECT_INTERVAL, value) { copy(reconnectInterval = value) }
+        }
+    }
+
+    fun updateReconnectBackoff(value: Boolean) {
+        updateBooleanPref(PreferenceConstants.RECONNECT_BACKOFF, value) { copy(reconnectBackoff = value) }
     }
 
     fun updateFullscreen(value: Boolean) {

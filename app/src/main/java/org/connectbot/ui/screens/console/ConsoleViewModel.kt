@@ -308,6 +308,8 @@ class ConsoleViewModel @Inject constructor(
      * Request a reconnection for the given bridge.
      */
     fun reconnect(bridge: TerminalBridge) {
+        // A manual reconnect restarts the automatic retry budget
+        bridge.resetReconnectAttempts()
         terminalManager?.requestReconnect(bridge)
         _uiState.update { it.copy(revision = it.revision + 1) }
     }

@@ -225,6 +225,10 @@ class TerminalManager :
                     ),
                 )
             }
+
+            // After startup keys are available, open connections for hosts
+            // marked to connect automatically when the app starts.
+            connectOnStartupHosts()
         }
 
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -257,6 +261,43 @@ class TerminalManager :
 
     private fun updateSavingKeys() {
         savingKeys = prefs.getBoolean(PreferenceConstants.MEMKEYS, true)
+    }
+
+    /**
+     * Open connections for all hosts flagged to connect automatically when the
+     * app starts. Runs once per service lifetime from [onCreate], after startup
+     * keys have loaded so key-based authentication is ready.
+     */
+    private suspend fun connectOnStartupHosts() {
+        val hosts = try {
+            hostRepository.getConnectOnStartupHosts()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to load connect-on-startup hosts")
+            return
+        }
+
+        val connectedIds = synchronized(_bridges) {
+            _bridges.map { it.host.id }.toSet()
+        }
+
+        for (host in hosts) {
+            if (host.id in connectedIds) {
+                continue
+            }
+            try {
+                Timber.i("Auto-connecting to '%s' on startup", host.nickname)
+                openConnection(host)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to auto-connect to '%s'", host.nickname)
+                _serviceErrors.emit(
+                    ServiceError.ConnectionFailed(
+                        hostNickname = host.nickname,
+                        hostname = host.hostname,
+                        reason = e.message ?: "Failed to connect on startup",
+                    ),
+                )
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -449,6 +490,14 @@ class TerminalManager :
     override fun onDisconnected(bridge: TerminalBridge) {
         var shouldHideRunningNotification = false
         Timber.d("Bridge Disconnected. Removing it.")
+
+        // Drop any queued reconnect so a closed session cannot come back to life
+        synchronized(pendingReconnect) {
+            pendingReconnect.removeAll { ref ->
+                val pending = ref.get()
+                pending == null || pending === bridge
+            }
+        }
 
         synchronized(_bridges) {
             // remove this bridge from our list
@@ -969,19 +1018,63 @@ class TerminalManager :
     }
 
     /**
-     * Insert request into reconnect queue to be executed either immediately
-     * or later when connectivity is restored depending on whether we're
-     * currently connected.
+     * Maximum automatic reconnect attempts for hosts with "stay connected"
+     * enabled, as configured in settings. 0 means unlimited.
+     */
+    internal fun reconnectMaxAttempts(): Int = prefs.getString(PreferenceConstants.RECONNECT_MAX_ATTEMPTS, null)
+        ?.toIntOrNull()?.coerceAtLeast(0)
+        ?: PreferenceConstants.DEFAULT_RECONNECT_MAX_ATTEMPTS
+
+    private fun reconnectIntervalSeconds(): Int = prefs.getString(PreferenceConstants.RECONNECT_INTERVAL, null)
+        ?.toIntOrNull()?.coerceIn(0, MAX_RECONNECT_INTERVAL_SECONDS)
+        ?: PreferenceConstants.DEFAULT_RECONNECT_INTERVAL_SECONDS
+
+    private fun reconnectBackoffEnabled(): Boolean = prefs.getBoolean(
+        PreferenceConstants.RECONNECT_BACKOFF,
+        PreferenceConstants.DEFAULT_RECONNECT_BACKOFF,
+    )
+
+    /**
+     * Insert request into reconnect queue to be executed after the configured
+     * retry interval, or later when connectivity is restored if the network is
+     * down when the interval elapses.
      *
      * @param bridge the TerminalBridge to reconnect when possible
      */
     fun requestReconnect(bridge: TerminalBridge) {
+        val delayMs = DisconnectPolicy.reconnectDelayMs(
+            attempt = bridge.reconnectAttempts,
+            intervalSeconds = reconnectIntervalSeconds(),
+            exponentialBackoff = reconnectBackoffEnabled(),
+        )
         synchronized(pendingReconnect) {
             pendingReconnect.add(WeakReference(bridge))
-            if (!bridge.isUsingNetwork() ||
-                connectivityMonitor.getCurrentNetworkInfo()?.isConnected == true
-            ) {
-                reconnectPending()
+        }
+        if (delayMs > 0) {
+            bridge.outputLine(res.getString(R.string.terminal_reconnect_pending, delayMs / 1000))
+        }
+        scope.launch {
+            if (delayMs > 0) {
+                delay(delayMs)
+            }
+            val shouldStart = synchronized(pendingReconnect) {
+                val ref = pendingReconnect.firstOrNull { it.get() === bridge }
+                if (ref != null &&
+                    (
+                        !bridge.isUsingNetwork() ||
+                            connectivityMonitor.getCurrentNetworkInfo()?.isConnected == true
+                        )
+                ) {
+                    pendingReconnect.remove(ref)
+                    true
+                } else {
+                    // Either the bridge was closed while waiting, or the network is
+                    // down; in the latter case onConnectivityRestored() picks it up.
+                    false
+                }
+            }
+            if (shouldStart) {
+                bridge.startConnection()
             }
         }
     }
@@ -1018,6 +1111,9 @@ class TerminalManager :
         const val TAG = "CB.TerminalManager"
 
         const val VIBRATE_DURATION: Long = 30
+
+        // Upper bound for the configurable reconnect interval (1 hour)
+        private const val MAX_RECONNECT_INTERVAL_SECONDS = 3600
 
         // Must match AUTH_VALIDITY_DURATION_SECONDS in BiometricKeyManager
         const val BIOMETRIC_AUTH_VALIDITY_SECONDS = 30

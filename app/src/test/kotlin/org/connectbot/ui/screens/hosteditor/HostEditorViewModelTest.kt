@@ -463,6 +463,59 @@ class HostEditorViewModelTest {
     }
 
     @Test
+    fun testLoadExistingHost_populatesConnectOnStartup() = runTest {
+        val hostId = 42L
+        val existingHost = Host(
+            id = hostId,
+            nickname = "kiosk-host",
+            protocol = "ssh",
+            username = "kiosk",
+            hostname = "10.0.0.1",
+            port = 22,
+            connectOnStartup = true,
+        )
+        `when`(repository.findHostById(hostId)).thenReturn(existingHost)
+        `when`(securePasswordStorage.hasPassword(hostId)).thenReturn(false)
+
+        val viewModel = createViewModel(hostId)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.connectOnStartup)
+    }
+
+    @Test
+    fun testSaveHost_persistsConnectOnStartup() = runTest {
+        val hostId = 42L
+        val existingHost = Host(
+            id = hostId,
+            nickname = "test-user@10.0.0.1",
+            protocol = "ssh",
+            username = "test-user",
+            hostname = "10.0.0.1",
+            port = 22,
+        )
+        `when`(repository.findHostById(hostId)).thenReturn(existingHost)
+        `when`(securePasswordStorage.hasPassword(hostId)).thenReturn(false)
+        `when`(repository.saveHost(any(Host::class.java) ?: Host())).thenAnswer { invocation ->
+            invocation.arguments[0] as Host
+        }
+
+        val viewModel = createViewModel(hostId)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.connectOnStartup)
+        viewModel.updateConnectOnStartup(true)
+        advanceUntilIdle()
+
+        viewModel.saveHost(useExpandedMode = true)
+        advanceUntilIdle()
+
+        val hostCaptor = ArgumentCaptor.forClass(Host::class.java)
+        verify(repository).saveHost(hostCaptor.capture() ?: Host())
+        assertTrue(hostCaptor.value.connectOnStartup)
+    }
+
+    @Test
     fun testLoadExistingHost_matchingNickname_initializesQuickConnectToNickname() = runTest {
         val hostId = 42L
         val existingHost = Host(

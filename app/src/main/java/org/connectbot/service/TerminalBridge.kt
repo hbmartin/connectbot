@@ -210,6 +210,11 @@ class TerminalBridge {
         private set
     private var awaitingClose = false
 
+    /** Consecutive automatic reconnect attempts since the last successful connection. */
+    @Volatile
+    var reconnectAttempts: Int = 0
+        private set
+
     private var forcedSize = false
 
     // Network state tracking for grace period
@@ -493,7 +498,14 @@ class TerminalBridge {
             Timber.w("No transport found for ${host.protocol}")
             return
         }
-        connecting = true
+
+        // Reset disconnect state so a failed attempt can dispatch a fresh
+        // disconnect, which is what schedules the next automatic retry.
+        synchronized(this) {
+            connecting = true
+            disconnected = false
+            disconnectReason = DisconnectReason.UNKNOWN
+        }
 
         transport = newTransport
         newTransport.bridge = this
@@ -642,6 +654,7 @@ class TerminalBridge {
     fun onConnected() {
         disconnected = false
         connecting = false
+        reconnectAttempts = 0
 
         // We no longer need our local output.
         localOutput.clear()
@@ -733,14 +746,30 @@ class TerminalBridge {
             }
         }
 
-        when (DisconnectPolicy.decide(reason, host.quickDisconnect, host.stayConnected)) {
+        val action = DisconnectPolicy.decide(
+            reason = reason,
+            quickDisconnect = host.quickDisconnect,
+            stayConnected = host.stayConnected,
+            reconnectAttempts = reconnectAttempts,
+            maxReconnectAttempts = manager.reconnectMaxAttempts(),
+        )
+        when (action) {
             is DisconnectAction.CloseImmediately -> {
                 awaitingClose = true
                 triggerDisconnectListener()
             }
 
             is DisconnectAction.AutoReconnect -> {
+                reconnectAttempts++
+                // Stay in the "connecting" state so the reconnect overlay is not
+                // shown while an automatic attempt is pending.
+                connecting = true
                 manager.requestReconnect(this)
+                manager.notifyBridgeStateChanged()
+            }
+
+            is DisconnectAction.GiveUpReconnect -> {
+                outputLine(manager.res.getString(R.string.terminal_reconnect_gave_up, reconnectAttempts))
                 manager.notifyBridgeStateChanged()
             }
 
@@ -748,6 +777,14 @@ class TerminalBridge {
                 manager.notifyBridgeStateChanged()
             }
         }
+    }
+
+    /**
+     * Restart the automatic reconnect budget, e.g. when the user manually
+     * taps "Reconnect" after the attempt limit was reached.
+     */
+    fun resetReconnectAttempts() {
+        reconnectAttempts = 0
     }
 
     /**

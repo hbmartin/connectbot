@@ -26,4 +26,7 @@ sealed class DisconnectAction {
 
     /** Silently attempt a new connection without showing the overlay. */
     object AutoReconnect : DisconnectAction()
+
+    /** Stop auto-reconnecting because the attempt limit was reached; show the reconnect overlay. */
+    object GiveUpReconnect : DisconnectAction()
 }

@@ -263,6 +263,35 @@ class HostDaoTest {
     }
 
     @Test
+    fun connectOnStartupStored() = runTest {
+        val host = createTestHost(nickname = "kiosk", connectOnStartup = true)
+        val id = hostDao.insert(host)
+
+        val retrieved = hostDao.getById(id)
+        assertThat(retrieved?.connectOnStartup).isTrue()
+    }
+
+    @Test
+    fun connectOnStartupDefaultsToFalse() = runTest {
+        val host = createTestHost(nickname = "plain")
+        val id = hostDao.insert(host)
+
+        val retrieved = hostDao.getById(id)
+        assertThat(retrieved?.connectOnStartup).isFalse()
+    }
+
+    @Test
+    fun getConnectOnStartupHostsReturnsOnlyFlaggedHosts() = runTest {
+        hostDao.insert(createTestHost(nickname = "zeta-auto", connectOnStartup = true))
+        hostDao.insert(createTestHost(nickname = "manual"))
+        hostDao.insert(createTestHost(nickname = "alpha-auto", connectOnStartup = true))
+
+        val startupHosts = hostDao.getConnectOnStartupHosts()
+
+        assertThat(startupHosts.map { it.nickname }).containsExactly("alpha-auto", "zeta-auto")
+    }
+
+    @Test
     fun multipleHostsWithDifferentProtocols() = runTest {
         val ssh1 = createTestHost(nickname = "ssh-1", protocol = "ssh", port = 22)
         val ssh2 = createTestHost(nickname = "ssh-2", protocol = "ssh", port = 2222)
@@ -298,6 +327,7 @@ class HostDaoTest {
         useCtrlAltAsMetaKey: Boolean = false,
         jumpHostId: Long? = null,
         profileId: Long? = 1L,
+        connectOnStartup: Boolean = false,
     ): Host = Host(
         nickname = nickname,
         protocol = protocol,
@@ -318,5 +348,6 @@ class HostDaoTest {
         useCtrlAltAsMetaKey = useCtrlAltAsMetaKey,
         jumpHostId = jumpHostId,
         profileId = profileId,
+        connectOnStartup = connectOnStartup,
     )
 }

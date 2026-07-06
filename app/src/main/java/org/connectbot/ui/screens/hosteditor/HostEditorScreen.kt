@@ -104,6 +104,7 @@ fun HostEditorScreen(
         onCompressionChange = viewModel::updateCompression,
         onWantSessionChange = viewModel::updateWantSession,
         onStayConnectedChange = viewModel::updateStayConnected,
+        onConnectOnStartupChange = viewModel::updateConnectOnStartup,
         onQuickDisconnectChange = viewModel::updateQuickDisconnect,
         onPostLoginChange = viewModel::updatePostLogin,
         onJumpHostChange = viewModel::updateJumpHostId,
@@ -134,6 +135,7 @@ fun HostEditorScreenContent(
     onCompressionChange: (Boolean) -> Unit,
     onWantSessionChange: (Boolean) -> Unit,
     onStayConnectedChange: (Boolean) -> Unit,
+    onConnectOnStartupChange: (Boolean) -> Unit,
     onQuickDisconnectChange: (Boolean) -> Unit,
     onPostLoginChange: (String) -> Unit,
     onJumpHostChange: (Long?) -> Unit,
@@ -462,6 +464,15 @@ fun HostEditorScreenContent(
                 summary = stringResource(R.string.hostpref_stayconnected_summary),
                 checked = uiState.stayConnected,
                 onCheckedChange = onStayConnectedChange,
+            )
+
+            // Connect on app start
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            SwitchPreference(
+                title = stringResource(R.string.hostpref_connectonstartup_title),
+                summary = stringResource(R.string.hostpref_connectonstartup_summary),
+                checked = uiState.connectOnStartup,
+                onCheckedChange = onConnectOnStartupChange,
             )
 
             // Quick disconnect
@@ -1275,6 +1286,7 @@ private fun HostEditorScreenPreview() {
             onCompressionChange = {},
             onWantSessionChange = {},
             onStayConnectedChange = {},
+            onConnectOnStartupChange = {},
             onQuickDisconnectChange = {},
             onPostLoginChange = {},
             onJumpHostChange = {},

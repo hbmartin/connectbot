@@ -18,16 +18,52 @@
 package org.connectbot.service
 
 object DisconnectPolicy {
+    /** Longest delay between automatic reconnect attempts when backoff is enabled. */
+    const val MAX_RECONNECT_DELAY_MS: Long = 300_000L
+
     fun decide(
         reason: DisconnectReason,
         quickDisconnect: Boolean,
         stayConnected: Boolean,
+        reconnectAttempts: Int = 0,
+        maxReconnectAttempts: Int = 0,
     ): DisconnectAction {
         if (reason == DisconnectReason.USER_REQUESTED) return DisconnectAction.CloseImmediately
         if (quickDisconnect) return DisconnectAction.CloseImmediately
         // Never auto-reconnect on auth failures — looping would lock accounts
         if (reason == DisconnectReason.AUTH_FAIL) return DisconnectAction.ShowReconnectOverlay
-        if (stayConnected) return DisconnectAction.AutoReconnect
+        if (stayConnected) {
+            // maxReconnectAttempts == 0 means unlimited attempts
+            return if (maxReconnectAttempts > 0 && reconnectAttempts >= maxReconnectAttempts) {
+                DisconnectAction.GiveUpReconnect
+            } else {
+                DisconnectAction.AutoReconnect
+            }
+        }
         return DisconnectAction.ShowReconnectOverlay
     }
+
+    /**
+     * Delay before automatic reconnect attempt number [attempt] (1-based).
+     *
+     * The first attempt fires immediately so a dropped session recovers as fast as
+     * before this setting existed; later attempts wait [intervalSeconds], doubling
+     * each attempt (capped at [MAX_RECONNECT_DELAY_MS]) when [exponentialBackoff]
+     * is enabled.
+     */
+    fun reconnectDelayMs(
+        attempt: Int,
+        intervalSeconds: Int,
+        exponentialBackoff: Boolean,
+    ): Long {
+        if (attempt <= 1) return 0L
+        val baseMs = intervalSeconds.coerceAtLeast(0).toLong() * 1000L
+        if (!exponentialBackoff) return baseMs
+        val exponent = (attempt - 2).coerceAtMost(MAX_BACKOFF_EXPONENT)
+        // The cap limits backoff growth but never cuts below the configured interval
+        return (baseMs shl exponent).coerceAtMost(maxOf(baseMs, MAX_RECONNECT_DELAY_MS))
+    }
+
+    // 2^9 * 1s already exceeds MAX_RECONNECT_DELAY_MS; capping the exponent avoids shift overflow
+    private const val MAX_BACKOFF_EXPONENT: Int = 9
 }

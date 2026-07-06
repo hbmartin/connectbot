@@ -54,6 +54,7 @@ data class HostEditorUiState(
     val compression: Boolean = false,
     val wantSession: Boolean = true,
     val stayConnected: Boolean = false,
+    val connectOnStartup: Boolean = false,
     val quickDisconnect: Boolean = false,
     val postLogin: String = "",
     val jumpHostId: Long? = null,
@@ -206,6 +207,7 @@ class HostEditorViewModel @Inject constructor(
                             compression = host.compression,
                             wantSession = host.wantSession,
                             stayConnected = host.stayConnected,
+                            connectOnStartup = host.connectOnStartup,
                             quickDisconnect = host.quickDisconnect,
                             postLogin = host.postLogin ?: "",
                             jumpHostId = host.jumpHostId,
@@ -347,6 +349,10 @@ class HostEditorViewModel @Inject constructor(
         _uiState.update { it.copy(stayConnected = value) }
     }
 
+    fun updateConnectOnStartup(value: Boolean) {
+        _uiState.update { it.copy(connectOnStartup = value) }
+    }
+
     fun updateQuickDisconnect(value: Boolean) {
         _uiState.update { it.copy(quickDisconnect = value) }
     }
@@ -405,6 +411,7 @@ class HostEditorViewModel @Inject constructor(
                     compression = state.compression,
                     wantSession = state.wantSession,
                     stayConnected = state.stayConnected,
+                    connectOnStartup = state.connectOnStartup,
                     quickDisconnect = state.quickDisconnect,
                     postLogin = state.postLogin.ifBlank { null },
                     lastConnect = existingHost?.lastConnect ?: System.currentTimeMillis(),
