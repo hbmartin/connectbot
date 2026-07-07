@@ -25,12 +25,15 @@ import android.content.Context
 import android.os.Build
 import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -142,6 +145,7 @@ import org.connectbot.terminal.SelectionController
 import org.connectbot.terminal.Terminal
 import org.connectbot.terminal.VTermKey
 import org.connectbot.ui.LoadingScreen
+import org.connectbot.ui.LocalEinkMode
 import org.connectbot.ui.LocalTerminalManager
 import org.connectbot.ui.components.AuthBannerDialog
 import org.connectbot.ui.components.FloatingTextInputDialog
@@ -525,11 +529,12 @@ private fun ConsoleTerminalPage(
             bridge.onTextInputRequest = onTextInputRequest
         }
 
+        val einkMode = LocalEinkMode.current
         if (isActive) {
             AnimatedVisibility(
                 visible = showExtraKeyboard,
-                enter = fadeIn(animationSpec = tween(durationMillis = 100)),
-                exit = fadeOut(animationSpec = tween(durationMillis = 100)),
+                enter = if (einkMode) EnterTransition.None else fadeIn(animationSpec = tween(durationMillis = 100)),
+                exit = if (einkMode) ExitTransition.None else fadeOut(animationSpec = tween(durationMillis = 100)),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .testTag("terminal_keyboard"),
@@ -546,7 +551,7 @@ private fun ConsoleTerminalPage(
                     onOpenTextInput = onTextInputRequest,
                     onScrollInProgressChange = onKeyboardScrollInProgressChange,
                     imeVisible = imeVisible,
-                    playAnimation = !hasPlayedKeyboardAnimation,
+                    playAnimation = !hasPlayedKeyboardAnimation && !einkMode,
                 )
             }
 
@@ -568,8 +573,8 @@ private fun ConsoleTerminalPage(
 
             AnimatedVisibility(
                 visible = bridge.isDisconnected && !bridge.isConnecting && promptState == null,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it }),
+                enter = if (einkMode) EnterTransition.None else slideInVertically(initialOffsetY = { it }),
+                exit = if (einkMode) ExitTransition.None else slideOutVertically(targetOffsetY = { it }),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 val terminalColors = MaterialTheme.colorScheme.terminal
@@ -577,6 +582,10 @@ private fun ConsoleTerminalPage(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(terminalColors.overlayBackground)
+                        .then(
+                            // Hard border stands in for the translucent edge on e-ink
+                            if (einkMode) Modifier.border(1.dp, terminalColors.overlayText) else Modifier,
+                        )
                         .padding(16.dp),
                 ) {
                     Text(
@@ -620,6 +629,7 @@ fun ConsoleScreen(
 ) {
     val context = LocalContext.current
     val terminalManager = LocalTerminalManager.current
+    val einkMode = LocalEinkMode.current
     val uiState by viewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -811,16 +821,17 @@ fun ConsoleScreen(
     }
 
     // While the title bar is hidden the transparent status bar sits directly
-    // on the black terminal, so it needs light icons regardless of the app
-    // theme; restore the theme's appearance once the title bar returns.
+    // on the terminal, so it needs icons matching the terminal background
+    // (light on the usual black, dark on the white e-ink scheme) regardless
+    // of the app theme; restore the theme's appearance once the title bar returns.
     val rootView = LocalView.current
     val titleBarVisible = !titleBarHide || showTitleBar
-    DisposableEffect(rootView, titleBarVisible) {
+    DisposableEffect(rootView, titleBarVisible, einkMode) {
         val window = (rootView.context as? Activity)?.window
         val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
         val previousLightStatusBars = controller?.isAppearanceLightStatusBars
         if (controller != null && !titleBarVisible) {
-            controller.isAppearanceLightStatusBars = false
+            controller.isAppearanceLightStatusBars = einkMode
         }
         onDispose {
             if (controller != null && previousLightStatusBars != null) {
@@ -1041,8 +1052,9 @@ fun ConsoleScreen(
             .then(if (keepScreenOn) Modifier.keepScreenOn() else Modifier),
         // The console is a terminal screen: keep everything behind and around
         // the terminal (including the area under the transparent status bar)
-        // black instead of the theme background.
-        containerColor = Color.Black,
+        // black instead of the theme background. In e-ink mode the terminal
+        // background is white, so the surround matches it.
+        containerColor = if (einkMode) Color.White else Color.Black,
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets
             .union(WindowInsets.imeAnimationTarget),
     ) { innerPadding ->
@@ -1244,7 +1256,7 @@ fun ConsoleScreen(
                         )
                     }
                 },
-                colors = if (titleBarHide) {
+                colors = if (titleBarHide && !einkMode) {
                     // Translucent overlay when auto-hide is enabled
                     TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),

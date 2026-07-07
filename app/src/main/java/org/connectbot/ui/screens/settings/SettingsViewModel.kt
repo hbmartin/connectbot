@@ -86,6 +86,7 @@ data class SettingsUiState(
     val fontImportError: String? = null,
     val fontDownloadInProgress: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val einkMode: Boolean = false,
     val language: String = "",
     val languageDownloadStates: Map<String, LanguageDownloadState> = emptyMap(),
     val installedLanguages: Set<String> = emptySet(),
@@ -219,6 +220,7 @@ class SettingsViewModel @Inject constructor(
             customTerminalTypes = customTerminalTypes,
             localFonts = localFonts,
             themeMode = ThemeMode.fromString(prefs.getString(PreferenceConstants.THEME_MODE, null)),
+            einkMode = prefs.getBoolean(PreferenceConstants.EINK_MODE, false),
             language = currentLanguage,
             defaultProfileId = prefs.getLong("defaultProfileId", 0L),
         )
@@ -363,6 +365,10 @@ class SettingsViewModel @Inject constructor(
 
     fun updateThemeMode(mode: ThemeMode) {
         updateStringPref(PreferenceConstants.THEME_MODE, mode.name) { copy(themeMode = mode) }
+    }
+
+    fun updateEinkMode(value: Boolean) {
+        updateBooleanPref(PreferenceConstants.EINK_MODE, value) { copy(einkMode = value) }
     }
 
     fun updateLanguage(languageTag: String) {

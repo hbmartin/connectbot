@@ -92,4 +92,7 @@ object PreferenceConstants {
 
     /* Theme */
     const val THEME_MODE: String = "themeMode"
+
+    /* E-ink displays: disable animations, use high-contrast flat rendering */
+    const val EINK_MODE: String = "einkMode"
 }
