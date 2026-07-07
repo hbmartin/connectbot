@@ -191,6 +191,7 @@ fun SettingsScreen(
         onPgUpDnGestureChange = viewModel::updatePgUpDnGesture,
         onSwipeSessionsChange = viewModel::updateSwipeSessions,
         onVolumeFontChange = viewModel::updateVolumeFont,
+        onVolumeTmuxPanesChange = viewModel::updateVolumeTmuxPanes,
         onKeepAliveChange = viewModel::updateKeepAlive,
         onAlwaysVisibleChange = viewModel::updateAlwaysVisible,
         onShiftFkeysChange = viewModel::updateShiftFkeys,
@@ -236,6 +237,7 @@ fun SettingsScreenContent(
     onPgUpDnGestureChange: (Boolean) -> Unit,
     onSwipeSessionsChange: (Boolean) -> Unit,
     onVolumeFontChange: (Boolean) -> Unit,
+    onVolumeTmuxPanesChange: (Boolean) -> Unit,
     onKeepAliveChange: (Boolean) -> Unit,
     onAlwaysVisibleChange: (Boolean) -> Unit,
     onShiftFkeysChange: (Boolean) -> Unit,
@@ -546,6 +548,15 @@ fun SettingsScreenContent(
                     summary = stringResource(R.string.pref_volumefont_summary),
                     checked = uiState.volumefont,
                     onCheckedChange = onVolumeFontChange,
+                )
+            }
+
+            item {
+                SwitchPreference(
+                    title = stringResource(R.string.pref_volume_tmux_panes_title),
+                    summary = stringResource(R.string.pref_volume_tmux_panes_summary),
+                    checked = uiState.volumeTmuxPanes,
+                    onCheckedChange = onVolumeTmuxPanesChange,
                 )
             }
 
@@ -1601,6 +1612,7 @@ private fun SettingsScreenPreview() {
             onPgUpDnGestureChange = {},
             onSwipeSessionsChange = {},
             onVolumeFontChange = {},
+        onVolumeTmuxPanesChange = {},
             onKeepAliveChange = {},
             onAlwaysVisibleChange = {},
             onShiftFkeysChange = {},
