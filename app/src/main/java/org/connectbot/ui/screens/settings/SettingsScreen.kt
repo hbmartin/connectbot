@@ -206,6 +206,7 @@ fun SettingsScreen(
         onBellVolumeChange = viewModel::updateBellVolume,
         onBellVibrateChange = viewModel::updateBellVibrate,
         onBellNotificationChange = viewModel::updateBellNotification,
+        onCommandCompletionNotifyChange = viewModel::updateCommandCompletionNotify,
         modifier = modifier,
     )
 }
@@ -254,6 +255,7 @@ fun SettingsScreenContent(
     onBellVolumeChange: (Float) -> Unit,
     onBellVibrateChange: (Boolean) -> Unit,
     onBellNotificationChange: (Boolean) -> Unit,
+    onCommandCompletionNotifyChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     highlightItem: String? = null,
 ) {
@@ -741,6 +743,29 @@ fun SettingsScreenContent(
                     summary = stringResource(R.string.pref_bell_notification_summary),
                     checked = uiState.bellNotification,
                     onCheckedChange = onBellNotificationChange,
+                )
+            }
+
+            item {
+                val completionEntries = listOf(
+                    stringResource(R.string.list_command_completion_off) to "0",
+                    stringResource(R.string.list_command_completion_10s) to "10",
+                    stringResource(R.string.list_command_completion_30s) to "30",
+                    stringResource(R.string.list_command_completion_1m) to "60",
+                    stringResource(R.string.list_command_completion_2m) to "120",
+                    stringResource(R.string.list_command_completion_5m) to "300",
+                )
+                val selectedLabel = completionEntries.firstOrNull { it.second == uiState.commandCompletionNotify }?.first
+                ListPreference(
+                    title = stringResource(R.string.pref_command_completion_title),
+                    summary = if (selectedLabel != null && uiState.commandCompletionNotify != "0") {
+                        stringResource(R.string.pref_command_completion_summary_on, selectedLabel)
+                    } else {
+                        stringResource(R.string.pref_command_completion_summary)
+                    },
+                    value = uiState.commandCompletionNotify,
+                    entries = completionEntries,
+                    onValueChange = onCommandCompletionNotifyChange,
                 )
             }
         }
@@ -1659,6 +1684,7 @@ private fun SettingsScreenPreview() {
             onBellVolumeChange = {},
             onBellVibrateChange = {},
             onBellNotificationChange = {},
+            onCommandCompletionNotifyChange = {},
         )
     }
 }

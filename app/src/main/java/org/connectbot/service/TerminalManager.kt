@@ -60,6 +60,7 @@ import org.connectbot.data.entity.Host
 import org.connectbot.data.entity.Pubkey
 import org.connectbot.di.CoroutineDispatchers
 import org.connectbot.transport.TransportFactory
+import org.connectbot.service.tmux.TmuxCommandCompletion
 import org.connectbot.util.PreferenceConstants
 import org.connectbot.util.ProviderLoader
 import org.connectbot.util.ProviderLoaderListener
@@ -913,6 +914,31 @@ class TerminalManager :
         }
     }
 
+    /**
+     * Notification that a long-running command finished in a backgrounded host
+     * shell. The duration threshold ("off" included) is already enforced at
+     * emit time, so this only gates on the app being backgrounded.
+     */
+    fun sendCommandCompletionNotification(host: Host, durationMs: Long, snippet: String?) {
+        if (!isUiBound) {
+            connectionNotifier.showCommandCompletionNotification(this, host, null, null, durationMs, snippet)
+        }
+    }
+
+    /** Same as [sendCommandCompletionNotification] for a command in a tmux window. */
+    fun sendTmuxCommandCompletionNotification(host: Host, event: TmuxCommandCompletion) {
+        if (!isUiBound) {
+            connectionNotifier.showCommandCompletionNotification(
+                this,
+                host,
+                "${event.sessionId}|${event.windowId}",
+                "${event.sessionName}:${event.windowName}",
+                event.durationMs,
+                event.snippet,
+            )
+        }
+    }
+
     override fun onSharedPreferenceChanged(
         sharedPreferences: SharedPreferences,
         key: String?,
@@ -948,6 +974,13 @@ class TerminalManager :
             synchronized(_bridges) {
                 for (bridge in _bridges) {
                     bridge.setEinkMode(einkMode)
+                }
+            }
+        } else if (PreferenceConstants.COMMAND_COMPLETION_NOTIFY == key) {
+            val thresholdMs = completionThresholdMs(sharedPreferences)
+            synchronized(_bridges) {
+                for (bridge in _bridges) {
+                    bridge.tmux?.completionThresholdMs = thresholdMs
                 }
             }
         }
