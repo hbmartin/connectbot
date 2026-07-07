@@ -195,8 +195,11 @@ class HostListViewModel @Inject constructor(
         // Check if host has an active bridge
         val bridge = manager.bridgesFlow.value.find { it.host.id == host.id }
         if (bridge != null) {
-            // Bridge exists but may be disconnected or in grace period
-            return if (bridge.disconnected || bridge.isInGracePeriod()) {
+            // A bridge counting down or retrying an automatic reconnect (attempts > 0)
+            // has no live session yet, so report DISCONNECTED for the whole retry
+            // sequence rather than flashing CONNECTED during each in-flight attempt.
+            val reconnecting = bridge.reconnectAttempts > 0 && !bridge.isSessionOpen
+            return if (bridge.disconnected || bridge.isInGracePeriod() || reconnecting) {
                 ConnectionState.DISCONNECTED
             } else {
                 ConnectionState.CONNECTED
