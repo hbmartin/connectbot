@@ -1034,7 +1034,7 @@ class SSH :
     }
 
     private fun onDisconnect(reason: DisconnectReason = DisconnectReason.IO_ERROR) {
-        bridge?.dispatchDisconnect(reason)
+        dispatchDisconnectIfCurrent(reason)
     }
 
     @Throws(IOException::class)

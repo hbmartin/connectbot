@@ -499,18 +499,23 @@ class TerminalBridge {
             return
         }
 
-        // Reset disconnect state so a failed attempt can dispatch a fresh
-        // disconnect, which is what schedules the next automatic retry.
+        newTransport.bridge = this
+        newTransport.manager = manager
+        newTransport.host = host
+
+        // Publish the new transport as the current one BEFORE clearing the
+        // disconnect state. A previous transport being torn down still holds a
+        // back-reference to this bridge; making the new transport current first
+        // means its late connectionLost() is rejected by the identity guard in
+        // AbsTransport subclasses' onDisconnect() rather than dispatching a
+        // spurious second disconnect. Resetting disconnected afterwards lets a
+        // genuine failure of THIS attempt schedule the next automatic retry.
+        transport = newTransport
         synchronized(this) {
             connecting = true
             disconnected = false
             disconnectReason = DisconnectReason.UNKNOWN
         }
-
-        transport = newTransport
-        newTransport.bridge = this
-        newTransport.manager = manager
-        newTransport.host = host
 
         // TODO make this more abstract so we don't litter on AbsTransport
         if (newTransport is SSH) {
@@ -654,7 +659,7 @@ class TerminalBridge {
     fun onConnected() {
         disconnected = false
         connecting = false
-        reconnectAttempts = 0
+        resetReconnectAttempts()
 
         // We no longer need our local output.
         localOutput.clear()
@@ -761,9 +766,11 @@ class TerminalBridge {
 
             is DisconnectAction.AutoReconnect -> {
                 reconnectAttempts++
-                // Stay in the "connecting" state so the reconnect overlay is not
-                // shown while an automatic attempt is pending.
-                connecting = true
+                // The disconnect overlay stays visible while the retry counts down
+                // (the terminal prints "Reconnecting in N seconds"); startConnection()
+                // sets `connecting` once the attempt actually begins, which hides it.
+                // This keeps the overlay's Reconnect/Close affordances reachable if a
+                // retry parks indefinitely waiting for connectivity.
                 manager.requestReconnect(this)
                 manager.notifyBridgeStateChanged()
             }

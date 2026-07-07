@@ -301,17 +301,12 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateReconnectMaxAttempts(value: String) {
-        // Only allow numeric input; 0 means unlimited
-        if (value.isEmpty() || value.all { it.isDigit() }) {
-            updateStringPref(PreferenceConstants.RECONNECT_MAX_ATTEMPTS, value) { copy(reconnectMaxAttempts = value) }
-        }
+        // 0 means unlimited; a blank field is allowed so the user can retype.
+        updateNumericStringPref(PreferenceConstants.RECONNECT_MAX_ATTEMPTS, value) { copy(reconnectMaxAttempts = value) }
     }
 
     fun updateReconnectInterval(value: String) {
-        // Only allow numeric input
-        if (value.isEmpty() || value.all { it.isDigit() }) {
-            updateStringPref(PreferenceConstants.RECONNECT_INTERVAL, value) { copy(reconnectInterval = value) }
-        }
+        updateNumericStringPref(PreferenceConstants.RECONNECT_INTERVAL, value) { copy(reconnectInterval = value) }
     }
 
     fun updateReconnectBackoff(value: Boolean) {
@@ -578,6 +573,16 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.edit { putString(key, value) }
             _uiState.update { it.updateState() }
+        }
+    }
+
+    /**
+     * Persist a numeric-only string preference, ignoring input that contains
+     * non-digit characters (a blank string is accepted so the field can be cleared).
+     */
+    private fun updateNumericStringPref(key: String, value: String, updateState: SettingsUiState.() -> SettingsUiState) {
+        if (value.all { it.isDigit() }) {
+            updateStringPref(key, value, updateState)
         }
     }
 

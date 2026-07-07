@@ -77,7 +77,26 @@ object PreferenceConstants {
     const val RECONNECT_INTERVAL: String = "reconnectInterval"
     const val DEFAULT_RECONNECT_INTERVAL_SECONDS: Int = 5
     const val RECONNECT_BACKOFF: String = "reconnectBackoff"
-    const val DEFAULT_RECONNECT_BACKOFF: Boolean = false
+    const val DEFAULT_RECONNECT_BACKOFF: Boolean = true
+
+    // Upper bound for the configurable reconnect interval (1 hour)
+    const val MAX_RECONNECT_INTERVAL_SECONDS: Int = 3600
+
+    /**
+     * Parse the stored "max reconnect attempts" preference into a non-negative
+     * count, falling back to [DEFAULT_RECONNECT_MAX_ATTEMPTS] (0 = unlimited).
+     */
+    @JvmStatic
+    fun parseReconnectMaxAttempts(stored: String?): Int = stored?.toIntOrNull()?.coerceAtLeast(0) ?: DEFAULT_RECONNECT_MAX_ATTEMPTS
+
+    /**
+     * Parse the stored "reconnect interval" preference into a seconds value
+     * clamped to [0, [MAX_RECONNECT_INTERVAL_SECONDS]], falling back to
+     * [DEFAULT_RECONNECT_INTERVAL_SECONDS].
+     */
+    @JvmStatic
+    fun parseReconnectIntervalSeconds(stored: String?): Int = stored?.toIntOrNull()?.coerceIn(0, MAX_RECONNECT_INTERVAL_SECONDS)
+        ?: DEFAULT_RECONNECT_INTERVAL_SECONDS
 
     const val SHIFT_FKEYS: String = "shiftfkeys"
     const val CTRL_FKEYS: String = "ctrlfkeys"

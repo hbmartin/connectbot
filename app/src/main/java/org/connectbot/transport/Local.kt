@@ -70,7 +70,7 @@ class Local @VisibleForTesting constructor(private val killer: Killer) : AbsTran
         shellPid = pids[0]
         val exitWatcher = Runnable {
             Exec.waitFor(shellPid)
-            bridge?.dispatchDisconnect(DisconnectReason.REMOTE_EOF)
+            dispatchDisconnectIfCurrent(DisconnectReason.REMOTE_EOF)
         }
 
         val exitWatcherThread = Thread(exitWatcher)
@@ -100,7 +100,7 @@ class Local @VisibleForTesting constructor(private val killer: Killer) : AbsTran
     @Throws(IOException::class)
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         val inputStream = `is` ?: run {
-            bridge?.dispatchDisconnect(DisconnectReason.IO_ERROR)
+            dispatchDisconnectIfCurrent(DisconnectReason.IO_ERROR)
             throw IOException("session closed")
         }
         return inputStream.read(buffer, offset, length)

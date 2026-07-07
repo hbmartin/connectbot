@@ -38,6 +38,7 @@ import android.security.keystore.UserNotAuthenticatedException
 import com.trilead.ssh2.crypto.PublicKeyUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -178,6 +179,11 @@ class TerminalManager :
 
     private val pendingReconnect: MutableList<WeakReference<TerminalBridge>> = ArrayList()
 
+    // Pending delayed-reconnect timers, one per bridge. Scheduling a new reconnect
+    // cancels and replaces any existing timer for that bridge, guaranteeing at most
+    // one in-flight reconnect attempt per bridge (no duplicate startConnection races).
+    private val reconnectJobs = ConcurrentHashMap<TerminalBridge, Job>()
+
     private val nextTemporaryHostId = AtomicLong(-1L)
 
     internal var hardKeyboardHidden = false
@@ -276,26 +282,18 @@ class TerminalManager :
             return
         }
 
-        val connectedIds = synchronized(_bridges) {
-            _bridges.map { it.host.id }.toSet()
-        }
-
         for (host in hosts) {
-            if (host.id in connectedIds) {
+            // Skip hosts already connected (e.g. opened via a launch intent). The
+            // bridge surfaces any real connection failure through its own error path,
+            // so we only log the synchronous "already open" / setup case here.
+            if (getConnectedBridge(host) != null) {
                 continue
             }
             try {
                 Timber.i("Auto-connecting to '%s' on startup", host.nickname)
                 openConnection(host)
             } catch (e: Exception) {
-                Timber.e(e, "Failed to auto-connect to '%s'", host.nickname)
-                _serviceErrors.emit(
-                    ServiceError.ConnectionFailed(
-                        hostNickname = host.nickname,
-                        hostname = host.hostname,
-                        reason = e.message ?: "Failed to connect on startup",
-                    ),
-                )
+                Timber.w(e, "Skipped auto-connect for '%s'", host.nickname)
             }
         }
     }
@@ -355,10 +353,10 @@ class TerminalManager :
             _bridges.filter { it.host.id == hostId }
         }
 
+        // Cancel any pending reconnect timers/parked entries before tearing down.
+        reconnectJobs.keys.filter { it.host.id == hostId }.forEach { reconnectJobs.remove(it)?.cancel() }
         synchronized(pendingReconnect) {
-            pendingReconnect.removeAll { ref ->
-                ref.get()?.host?.id == hostId
-            }
+            pendingReconnect.removeAll { it.get()?.host?.id == hostId || it.get() == null }
         }
 
         for (bridge in bridges) {
@@ -492,12 +490,7 @@ class TerminalManager :
         Timber.d("Bridge Disconnected. Removing it.")
 
         // Drop any queued reconnect so a closed session cannot come back to life
-        synchronized(pendingReconnect) {
-            pendingReconnect.removeAll { ref ->
-                val pending = ref.get()
-                pending == null || pending === bridge
-            }
-        }
+        cancelReconnect(bridge)
 
         synchronized(_bridges) {
             // remove this bridge from our list
@@ -1021,13 +1014,9 @@ class TerminalManager :
      * Maximum automatic reconnect attempts for hosts with "stay connected"
      * enabled, as configured in settings. 0 means unlimited.
      */
-    internal fun reconnectMaxAttempts(): Int = prefs.getString(PreferenceConstants.RECONNECT_MAX_ATTEMPTS, null)
-        ?.toIntOrNull()?.coerceAtLeast(0)
-        ?: PreferenceConstants.DEFAULT_RECONNECT_MAX_ATTEMPTS
+    internal fun reconnectMaxAttempts(): Int = PreferenceConstants.parseReconnectMaxAttempts(prefs.getString(PreferenceConstants.RECONNECT_MAX_ATTEMPTS, null))
 
-    private fun reconnectIntervalSeconds(): Int = prefs.getString(PreferenceConstants.RECONNECT_INTERVAL, null)
-        ?.toIntOrNull()?.coerceIn(0, MAX_RECONNECT_INTERVAL_SECONDS)
-        ?: PreferenceConstants.DEFAULT_RECONNECT_INTERVAL_SECONDS
+    private fun reconnectIntervalSeconds(): Int = PreferenceConstants.parseReconnectIntervalSeconds(prefs.getString(PreferenceConstants.RECONNECT_INTERVAL, null))
 
     private fun reconnectBackoffEnabled(): Boolean = prefs.getBoolean(
         PreferenceConstants.RECONNECT_BACKOFF,
@@ -1035,9 +1024,12 @@ class TerminalManager :
     )
 
     /**
-     * Insert request into reconnect queue to be executed after the configured
-     * retry interval, or later when connectivity is restored if the network is
-     * down when the interval elapses.
+     * Schedule an automatic reconnect for [bridge] after the configured retry
+     * interval. Scheduling cancels and replaces any timer already pending for the
+     * same bridge, so a bridge can never have two reconnect attempts in flight
+     * (e.g. a manual "Reconnect" tap while an automatic retry is counting down).
+     * If the network is down when the timer elapses, the bridge is parked in
+     * [pendingReconnect] for [onConnectivityRestored] to pick up.
      *
      * @param bridge the TerminalBridge to reconnect when possible
      */
@@ -1047,41 +1039,51 @@ class TerminalManager :
             intervalSeconds = reconnectIntervalSeconds(),
             exponentialBackoff = reconnectBackoffEnabled(),
         )
+        // A fresh request supersedes any earlier one; drop a stale parked entry too.
         synchronized(pendingReconnect) {
-            pendingReconnect.add(WeakReference(bridge))
+            pendingReconnect.removeAll { it.get() === bridge || it.get() == null }
         }
         if (delayMs > 0) {
             bridge.outputLine(res.getString(R.string.terminal_reconnect_pending, delayMs / 1000))
         }
-        scope.launch {
+        // LAZY so the job is registered in the map before it can run and remove itself.
+        val job = scope.launch(dispatchers.default, start = CoroutineStart.LAZY) {
             if (delayMs > 0) {
                 delay(delayMs)
             }
-            val shouldStart = synchronized(pendingReconnect) {
-                val ref = pendingReconnect.firstOrNull { it.get() === bridge }
-                if (ref != null &&
-                    (
-                        !bridge.isUsingNetwork() ||
-                            connectivityMonitor.getCurrentNetworkInfo()?.isConnected == true
-                        )
-                ) {
-                    pendingReconnect.remove(ref)
-                    true
-                } else {
-                    // Either the bridge was closed while waiting, or the network is
-                    // down; in the latter case onConnectivityRestored() picks it up.
-                    false
+            val networkReady = !bridge.isUsingNetwork() ||
+                connectivityMonitor.getCurrentNetworkInfo()?.isConnected == true
+            if (networkReady) {
+                bridge.startConnection()
+            } else {
+                // Park until connectivity is restored; onConnectivityRestored() drains it.
+                bridge.outputLine(res.getString(R.string.terminal_reconnect_waiting_network))
+                synchronized(pendingReconnect) {
+                    pendingReconnect.add(WeakReference(bridge))
                 }
             }
-            if (shouldStart) {
-                bridge.startConnection()
-            }
+            reconnectJobs.remove(bridge, coroutineContext[Job])
+        }
+        reconnectJobs.put(bridge, job)?.cancel()
+        job.start()
+    }
+
+    /**
+     * Cancel any pending reconnect timer and parked entry for [bridge]. Called when
+     * a bridge is torn down so a queued retry cannot resurrect a closed session and
+     * the sleeping coroutine (which captures the bridge) is released promptly.
+     */
+    private fun cancelReconnect(bridge: TerminalBridge) {
+        reconnectJobs.remove(bridge)?.cancel()
+        synchronized(pendingReconnect) {
+            pendingReconnect.removeAll { it.get() === bridge || it.get() == null }
         }
     }
 
     /**
-     * Reconnect all bridges that were pending a reconnect when connectivity
-     * was lost.
+     * Reconnect all bridges that were parked awaiting connectivity when the
+     * network was lost. Bridges counting down a timed retry live in [reconnectJobs],
+     * not here, so a brief connectivity blip cannot bypass their backoff delay.
      */
     private fun reconnectPending() {
         synchronized(pendingReconnect) {
@@ -1111,9 +1113,6 @@ class TerminalManager :
         const val TAG = "CB.TerminalManager"
 
         const val VIBRATE_DURATION: Long = 30
-
-        // Upper bound for the configurable reconnect interval (1 hour)
-        private const val MAX_RECONNECT_INTERVAL_SECONDS = 3600
 
         // Must match AUTH_VALIDITY_DURATION_SECONDS in BiometricKeyManager
         const val BIOMETRIC_AUTH_VALIDITY_SECONDS = 30

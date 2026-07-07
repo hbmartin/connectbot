@@ -179,7 +179,7 @@ class Telnet : AbsTransport {
             } while (n == 0)
             n = `is`!!.read(buffer, offset, length)
             if (n < 0) {
-                bridge?.dispatchDisconnect(DisconnectReason.REMOTE_EOF)
+                dispatchDisconnectIfCurrent(DisconnectReason.REMOTE_EOF)
                 throw IOException("Remote end closed connection.")
             }
 
@@ -194,7 +194,7 @@ class Telnet : AbsTransport {
         try {
             os?.write(buffer)
         } catch (_: SocketException) {
-            bridge?.dispatchDisconnect(DisconnectReason.IO_ERROR)
+            dispatchDisconnectIfCurrent(DisconnectReason.IO_ERROR)
         }
     }
 
@@ -203,7 +203,7 @@ class Telnet : AbsTransport {
         try {
             os?.write(c)
         } catch (_: SocketException) {
-            bridge?.dispatchDisconnect(DisconnectReason.IO_ERROR)
+            dispatchDisconnectIfCurrent(DisconnectReason.IO_ERROR)
         }
     }
 

@@ -21,6 +21,7 @@ import android.content.Context
 import android.net.Uri
 import org.connectbot.data.entity.Host
 import org.connectbot.data.entity.PortForward
+import org.connectbot.service.DisconnectReason
 import org.connectbot.service.TerminalBridge
 import org.connectbot.service.TerminalManager
 import java.io.IOException
@@ -99,6 +100,19 @@ abstract class AbsTransport {
      * should call [TerminalBridge.dispatchDisconnect].
      */
     abstract fun close()
+
+    /**
+     * Report a disconnect to the owning bridge, but only if this transport is
+     * still the bridge's current transport. Once a reconnect has replaced this
+     * transport, its delayed teardown (e.g. a late `connectionLost`) must stay
+     * silent so it cannot dispatch a spurious second disconnect against the new,
+     * possibly already-connected, session.
+     */
+    protected fun dispatchDisconnectIfCurrent(reason: DisconnectReason) {
+        val ownerBridge = bridge ?: return
+        if (ownerBridge.transport !== this) return
+        ownerBridge.dispatchDisconnect(reason)
+    }
 
     /**
      * Tells the transport what dimensions the display is currently

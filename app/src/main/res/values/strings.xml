@@ -728,6 +728,9 @@
 	<!-- Displayed in the terminal when automatic reconnection stops because the configured attempt limit was reached -->
 	<string name="terminal_reconnect_gave_up" tools:ignore="PluralsCandidate">"Gave up reconnecting after %1$d attempts"</string>
 
+	<!-- Displayed in the terminal when an automatic reconnect is waiting for network connectivity to return -->
+	<string name="terminal_reconnect_waiting_network">"Waiting for network to reconnect…"</string>
+
 	<!-- Displays the host key to the user in the terminal -->
 	<string name="terminal_sucess">"Verified host '%1$s' key: %2$s"</string>
 	<!-- Error message shown in terminal when host key verification fails -->
