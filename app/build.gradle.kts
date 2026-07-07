@@ -14,6 +14,13 @@ plugins {
 }
 
 appVersioning {
+    // In a git worktree, .git is a file pointing at <main>/.git/worktrees/<name>;
+    // the plugin needs the main repository root to run git commands.
+    val dotGit = rootProject.file(".git")
+    if (dotGit.isFile) {
+        val gitDirPath = dotGit.readText().trim().removePrefix("gitdir:").trim()
+        file(gitDirPath).parentFile?.parentFile?.parentFile?.let { gitRootDirectory.set(it) }
+    }
     tagFilter.set("v[0-9].*")
     overrideVersionCode { gitTag, _, _ ->
         val semVer = gitTag.toSemVer()
@@ -312,9 +319,9 @@ tasks.withType<Test>().configureEach {
 }
 
 // Generate filtered export schema from Room schema
-// Only includes tables needed for export/import (profiles, hosts, port_forwards)
+// Only includes tables needed for export/import (profiles, hosts, port_forwards, snippets)
 val generateExportSchema by tasks.registering {
-    val exportTables = setOf("profiles", "hosts", "port_forwards")
+    val exportTables = setOf("profiles", "hosts", "port_forwards", "snippets")
     val excludedFields = setOf("last_connect", "host_key_algo")
 
     // Read schema version from Room's @Database annotation.

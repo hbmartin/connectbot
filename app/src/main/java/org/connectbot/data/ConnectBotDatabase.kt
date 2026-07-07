@@ -29,6 +29,7 @@ import org.connectbot.data.dao.KnownHostDao
 import org.connectbot.data.dao.PortForwardDao
 import org.connectbot.data.dao.ProfileDao
 import org.connectbot.data.dao.PubkeyDao
+import org.connectbot.data.dao.SnippetDao
 import org.connectbot.data.entity.ColorPalette
 import org.connectbot.data.entity.ColorScheme
 import org.connectbot.data.entity.Host
@@ -36,6 +37,7 @@ import org.connectbot.data.entity.KnownHost
 import org.connectbot.data.entity.PortForward
 import org.connectbot.data.entity.Profile
 import org.connectbot.data.entity.Pubkey
+import org.connectbot.data.entity.Snippet
 
 /**
  * ConnectBot Room database.
@@ -57,6 +59,7 @@ import org.connectbot.data.entity.Pubkey
  * - Version 5: Added profiles table and profile_id column to hosts (manual migration)
  * - Version 6: Added force_size_rows and force_size_columns to profiles (AutoMigration)
  * - Version 7: Added ip_version column to hosts for IP version preference (AutoMigration)
+ * - Version 9: Added snippets table for reusable command snippets (AutoMigration)
  * - Future versions: Use Room AutoMigration when possible for simple schema changes
  *
  * Security Considerations:
@@ -72,8 +75,9 @@ import org.connectbot.data.entity.Pubkey
         ColorScheme::class,
         ColorPalette::class,
         Profile::class,
+        Snippet::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -82,6 +86,7 @@ import org.connectbot.data.entity.Pubkey
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
         AutoMigration(from = 7, to = 8),
+        AutoMigration(from = 8, to = 9),
     ],
 )
 @TypeConverters(Converters::class)
@@ -92,6 +97,7 @@ abstract class ConnectBotDatabase : RoomDatabase() {
     abstract fun knownHostDao(): KnownHostDao
     abstract fun colorSchemeDao(): ColorSchemeDao
     abstract fun profileDao(): ProfileDao
+    abstract fun snippetDao(): SnippetDao
 
     companion object {
         /**

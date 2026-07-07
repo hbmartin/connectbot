@@ -117,6 +117,7 @@ fun HostListScreen(
     onNavigateToProfiles: () -> Unit,
     onNavigateToHelp: () -> Unit,
     modifier: Modifier = Modifier,
+    onNavigateToSnippets: () -> Unit = {},
     onNavigateToSettingsHighlightConnPersist: () -> Unit = {},
     makingShortcut: Boolean = false,
     onSelectShortcut: (Host, String?, IconStyle) -> Unit = { _, _, _ -> },
@@ -260,6 +261,7 @@ fun HostListScreen(
         onNavigateToPubkeys = onNavigateToPubkeys,
         onNavigateToPortForwards = onNavigateToPortForwards,
         onNavigateToProfiles = onNavigateToProfiles,
+        onNavigateToSnippets = onNavigateToSnippets,
         onNavigateToHelp = onNavigateToHelp,
         onToggleSortOrder = viewModel::toggleSortOrder,
         onDeleteHost = viewModel::deleteHost,
@@ -293,6 +295,7 @@ fun HostListScreenContent(
     onDisconnectHost: (Host) -> Unit,
     onDisconnectAll: () -> Unit,
     modifier: Modifier = Modifier,
+    onNavigateToSnippets: () -> Unit = {},
     makingShortcut: Boolean = false,
     onSelectShortcut: (Host) -> Unit = {},
     onNavigateToSettingsHighlightConnPersist: () -> Unit = {},
@@ -380,6 +383,13 @@ fun HostListScreenContent(
                                 onClick = {
                                     showMenu = false
                                     onNavigateToProfiles()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.snippet_list_title)) },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigateToSnippets()
                                 },
                             )
                             DropdownMenuItem(
